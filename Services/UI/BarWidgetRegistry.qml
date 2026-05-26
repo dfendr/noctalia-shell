@@ -34,6 +34,7 @@ Singleton {
                            "PowerProfile": powerProfileComponent,
                            "SessionMenu": sessionMenuComponent,
                            "Settings": settingsComponent,
+                           "Scratchpad": scratchpadComponent,
                            "Spacer": spacerComponent,
                            "SystemMonitor": systemMonitorComponent,
                            "Taskbar": taskbarComponent,
@@ -228,6 +229,10 @@ Singleton {
                                   "Settings": {
                                     "iconColor": "none"
                                   },
+                                  "Scratchpad": {
+                                    "iconColor": "none",
+                                    "textColor": "none"
+                                  },
                                   "Spacer": {
                                     "width": 20
                                   },
@@ -385,6 +390,9 @@ Singleton {
   }
   property Component controlCenterComponent: Component {
     ControlCenter {}
+  }
+  property Component scratchpadComponent: Component {
+    Scratchpad {}
   }
   property Component spacerComponent: Component {
     Spacer {}
