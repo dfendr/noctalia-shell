@@ -12,12 +12,17 @@ NBox {
   Layout.fillWidth: true
   clip: true
 
-  // Get the primary monitor (first screen)
+  // Set by the panel hosting this card so the slider drives the monitor
+  // the popout is showing on, not arbitrarily Quickshell.screens[0].
+  // Falls back to the first screen if nothing is provided (matches the
+  // original behaviour for callers that don't pass a screen).
+  property var screen: null
+
   readonly property var brightnessMonitor: {
-    if (Quickshell.screens.length > 0) {
-      return BrightnessService.getMonitorForScreen(Quickshell.screens[0]);
-    }
-    return null;
+    var target = screen || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
+    if (!target)
+      return null;
+    return BrightnessService.getMonitorForScreen(target);
   }
 
   property real localBrightness: 0
@@ -139,15 +144,15 @@ NBox {
           propagateComposedEvents: true
 
           onWheel: wheel => {
-                     if (brightnessSlider.enabled && brightnessMonitor && brightnessMonitor.brightnessControlAvailable) {
-                       const delta = wheel.angleDelta.y || wheel.angleDelta.x;
-                       const step = Settings.data.brightness.brightnessStep / 100.0; // Convert percentage to 0-1 range
-                       const increment = delta > 0 ? step : -step;
-                       const newValue = Math.max(0, Math.min(1, localBrightness + increment));
-                       localBrightness = newValue;
-                       debounceTimer.restart();
-                     }
-                   }
+            if (brightnessSlider.enabled && brightnessMonitor && brightnessMonitor.brightnessControlAvailable) {
+              const delta = wheel.angleDelta.y || wheel.angleDelta.x;
+              const step = Settings.data.brightness.brightnessStep / 100.0; // Convert percentage to 0-1 range
+              const increment = delta > 0 ? step : -step;
+              const newValue = Math.max(0, Math.min(1, localBrightness + increment));
+              localBrightness = newValue;
+              debounceTimer.restart();
+            }
+          }
         }
       }
     }

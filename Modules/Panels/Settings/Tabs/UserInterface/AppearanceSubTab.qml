@@ -33,6 +33,22 @@ ColumnLayout {
     onToggled: checked => Settings.data.ui.scrollbarAlwaysVisible = checked
   }
 
+  // Strings hardcoded (rather than I18n.tr) because this slider is a
+  // local fork addition; no translation keys exist for it yet.
+  NValueSlider {
+    Layout.fillWidth: true
+    label: "Scroll-text fade"
+    description: "Horizontal fade applied to overflowing scrolling text (e.g. media titles in the bar). 0 disables; 0.1 is the legacy default."
+    from: 0
+    to: 0.3
+    stepSize: 0.01
+    showReset: true
+    value: Settings.data.ui.scrollTextFadeExtent
+    defaultValue: Settings.getDefaultValue("ui.scrollTextFadeExtent")
+    onMoved: value => Settings.data.ui.scrollTextFadeExtent = value
+    text: Math.round(Settings.data.ui.scrollTextFadeExtent * 100) + "%"
+  }
+
   NToggle {
     label: I18n.tr("panels.user-interface.shadows-label")
     description: I18n.tr("panels.user-interface.shadows-description")

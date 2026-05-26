@@ -99,9 +99,18 @@ SmartPanel {
       Repeater {
         model: Settings.data.controlCenter.cards
         Loader {
+          id: cardLoader
           active: modelData.enabled && (modelData.id !== "weather-card" || Settings.data.location.weatherEnabled)
           visible: active
           Layout.fillWidth: true
+          // Forward the hosting panel's screen to any card that
+          // exposes a `screen` property (currently BrightnessCard, so
+          // the slider targets the monitor the popout is on).
+          onLoaded: {
+            if (item && item.screen !== undefined) {
+              item.screen = Qt.binding(() => root.screen);
+            }
+          }
           Layout.preferredHeight: {
             switch (modelData.id) {
             case "profile-card":

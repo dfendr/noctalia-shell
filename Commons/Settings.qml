@@ -358,6 +358,10 @@ Singleton {
       property real fontFixedScale: 1.0
       property bool tooltipsEnabled: true
       property bool scrollbarAlwaysVisible: true
+      // Horizontal fade applied by NScrollText when text overflows its
+      // container — fraction of width on each side that fades to
+      // transparent. 0 disables the fade; 0.1 is the legacy default.
+      property real scrollTextFadeExtent: 0.1
       property bool boxBorderEnabled: false
       property real panelBackgroundOpacity: 0.93
       property bool translucentWidgets: false

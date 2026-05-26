@@ -43,8 +43,10 @@ Item {
   // Stepped marquee: avoids NumberAnimation.Infinite (~every vsync). ~17ms ≈ 60 updates/s.
   property int scrollTickIntervalMs: 16
 
-  // Fade controls (fadeExtent: 0.0–0.5, fraction of width that fades)
-  property real fadeExtent: 0.1
+  // Fade controls (fadeExtent: 0.0–0.5, fraction of width that fades).
+  // Defaults from Settings.data.ui.scrollTextFadeExtent so it tracks the
+  // user's UI preference; callers can still override per-instance.
+  property real fadeExtent: Settings.data?.ui?.scrollTextFadeExtent ?? 0.1
   property real fadeCornerRadius: 0
   property bool fadeRoundLeftCorners: true
 
