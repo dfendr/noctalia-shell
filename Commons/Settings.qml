@@ -673,6 +673,10 @@ Singleton {
       property bool enableMarkdown: false
       property string density: "default" // "default", "compact"
       property list<string> monitors: [] // holds notifications visibility per monitor
+      // When true, ignore the `monitors` allowlist and render notifications
+      // only on whichever output currently has keyboard focus (compositor-
+      // reported). Tracks reactively as focus moves between outputs.
+      property bool followFocusedScreen: false
       property string location: "top_right"
       property bool overlayLayer: true
       property real backgroundOpacity: 1.0

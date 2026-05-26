@@ -112,37 +112,54 @@ ColumnLayout {
       Layout.fillWidth: true
     }
 
-    NText {
-      text: I18n.tr("panels.notifications.monitors-desc")
-      wrapMode: Text.WordWrap
-      Layout.fillWidth: true
+    // Strings hardcoded (rather than I18n.tr) because this toggle is a
+    // local fork addition; no translations exist for the i18n keys yet.
+    NToggle {
+      label: "Follow focused screen"
+      description: "Show notifications only on the monitor with keyboard focus. Overrides the per-monitor allowlist below."
+      checked: Settings.data.notifications.followFocusedScreen
+      onToggled: checked => Settings.data.notifications.followFocusedScreen = checked
+      defaultValue: Settings.getDefaultValue("notifications.followFocusedScreen")
     }
 
-    Repeater {
-      model: Quickshell.screens || []
-      delegate: NCheckbox {
+    ColumnLayout {
+      Layout.fillWidth: true
+      spacing: Style.marginL
+      enabled: !Settings.data.notifications.followFocusedScreen
+      opacity: enabled ? 1.0 : 0.5
+
+      NText {
+        text: I18n.tr("panels.notifications.monitors-desc")
+        wrapMode: Text.WordWrap
         Layout.fillWidth: true
-        readonly property real compositorScale: {
-          const info = CompositorService.displayScales[modelData.name];
-          return (info && info.scale) ? info.scale : 1.0;
+      }
+
+      Repeater {
+        model: Quickshell.screens || []
+        delegate: NCheckbox {
+          Layout.fillWidth: true
+          readonly property real compositorScale: {
+            const info = CompositorService.displayScales[modelData.name];
+            return (info && info.scale) ? info.scale : 1.0;
+          }
+          label: modelData.name || I18n.tr("common.unknown")
+          description: {
+            I18n.tr("system.monitor-description", {
+                      "model": modelData.model,
+                      "width": modelData.width * compositorScale,
+                      "height": modelData.height * compositorScale,
+                      "scale": compositorScale
+                    });
+          }
+          checked: (Settings.data.notifications.monitors || []).indexOf(modelData.name) !== -1
+          onToggled: checked => {
+            if (checked) {
+              Settings.data.notifications.monitors = root.addMonitor(Settings.data.notifications.monitors, modelData.name);
+            } else {
+              Settings.data.notifications.monitors = root.removeMonitor(Settings.data.notifications.monitors, modelData.name);
+            }
+          }
         }
-        label: modelData.name || I18n.tr("common.unknown")
-        description: {
-          I18n.tr("system.monitor-description", {
-                    "model": modelData.model,
-                    "width": modelData.width * compositorScale,
-                    "height": modelData.height * compositorScale,
-                    "scale": compositorScale
-                  });
-        }
-        checked: (Settings.data.notifications.monitors || []).indexOf(modelData.name) !== -1
-        onToggled: checked => {
-                     if (checked) {
-                       Settings.data.notifications.monitors = root.addMonitor(Settings.data.notifications.monitors, modelData.name);
-                     } else {
-                       Settings.data.notifications.monitors = root.removeMonitor(Settings.data.notifications.monitors, modelData.name);
-                     }
-                   }
       }
     }
   }
