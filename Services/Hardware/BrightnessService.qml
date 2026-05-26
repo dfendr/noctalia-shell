@@ -238,22 +238,22 @@ Singleton {
       onStreamFinished: {
         var displays = text.trim().split("\n\n");
         ddcProc.ddcMonitors = displays.map(d => {
-                                             var ddcModelMatch = d.match(/(This monitor does not support DDC\/CI|Invalid display)/);
-                                             var modelMatch = d.match(/Model:\s*(.*)/);
-                                             var busMatch = d.match(/I2C bus:[ ]*\/dev\/i2c-([0-9]+)/);
-                                             var connectorMatch = d.match(/DRM[_ ]connector:\s*card\d+-(.+)/);
-                                             var ddcModel = ddcModelMatch ? ddcModelMatch.length > 0 : false;
-                                             var model = modelMatch ? modelMatch[1] : "Unknown";
-                                             var bus = busMatch ? busMatch[1] : "Unknown";
-                                             var connector = connectorMatch ? connectorMatch[1].trim() : "";
-                                             Logger.i("Brightness", "Detected DDC Monitor:", model, "connector:", connector, "bus:", bus, "is DDC:", !ddcModel);
-                                             return {
-                                               "model": model,
-                                               "busNum": bus,
-                                               "connector": connector,
-                                               "isDdc": !ddcModel
-                                             };
-                                           });
+          var ddcModelMatch = d.match(/(This monitor does not support DDC\/CI|Invalid display)/);
+          var modelMatch = d.match(/Model:\s*(.*)/);
+          var busMatch = d.match(/I2C bus:[ ]*\/dev\/i2c-([0-9]+)/);
+          var connectorMatch = d.match(/DRM[_ ]connector:\s*card\d+-(.+)/);
+          var ddcModel = ddcModelMatch ? ddcModelMatch.length > 0 : false;
+          var model = modelMatch ? modelMatch[1] : "Unknown";
+          var bus = busMatch ? busMatch[1] : "Unknown";
+          var connector = connectorMatch ? connectorMatch[1].trim() : "";
+          Logger.i("Brightness", "Detected DDC Monitor:", model, "connector:", connector, "bus:", bus, "is DDC:", !ddcModel);
+          return {
+            "model": model,
+            "busNum": bus,
+            "connector": connector,
+            "isDdc": !ddcModel
+          };
+        });
         root.ddcMonitors = ddcProc.ddcMonitors.filter(m => m.isDdc);
       }
     }
@@ -263,8 +263,60 @@ Singleton {
     id: monitor
 
     required property ShellScreen modelData
-    readonly property bool isDdc: Settings.data.brightness.enableDdcSupport && root.ddcMonitors.some(m => m.connector === modelData.name)
-    readonly property string busNum: root.ddcMonitors.find(m => m.connector === modelData.name)?.busNum ?? ""
+
+    // Pair this screen to a ddcutil entry. ddcutil normally exposes a
+    // DRM connector field that uniquely identifies each output, but
+    // when two monitors share an EDID (identical model + serial —
+    // common with paired panels of the same model) ddcutil mis-reads
+    // the connector and either reports both panels with the same name
+    // (DP-1, DP-1) or reports a name that doesn't match what Wayland
+    // sees for the second panel (DP-1 in ddcutil vs DP-3 in Wayland).
+    // Either way, the connector field can't be trusted, so fall back
+    // to pairing by index in Quickshell.screens. The kernel and
+    // ddcutil enumerate i2c buses in the same physical order as DRM
+    // connectors, so index-pairing is stable when connector matching
+    // is not.
+    readonly property var _matchedDdc: {
+      var screens = Quickshell.screens;
+      var ddc = root.ddcMonitors;
+
+      // Trust connector names only if every ddcutil entry maps to
+      // exactly one Wayland screen by name, with no within-ddc
+      // duplicates. Any other shape means EDID collision corrupted
+      // detection and we should not use connector matching at all.
+      var connectorsReliable = true;
+      var seenConnector = ({});
+      for (var i = 0; i < ddc.length; i++) {
+        var c = ddc[i].connector;
+        if (seenConnector[c]) {
+          connectorsReliable = false;
+          break;
+        }
+        seenConnector[c] = true;
+        var matches = 0;
+        for (var j = 0; j < screens.length; j++) {
+          if (screens[j].name === c)
+          matches++;
+        }
+        if (matches !== 1) {
+          connectorsReliable = false;
+          break;
+        }
+      }
+
+      if (connectorsReliable) {
+        return ddc.find(m => m.connector === modelData.name) ?? null;
+      }
+
+      // Fall back to index pairing.
+      for (var i = 0; i < screens.length; i++) {
+        if (screens[i] === modelData)
+        return (i < ddc.length) ? ddc[i] : null;
+      }
+      return null;
+    }
+    readonly property bool isDdc: Settings.data.brightness.enableDdcSupport && _matchedDdc !== null
+    readonly property string busNum: _matchedDdc?.busNum ?? ""
     readonly property bool isAppleDisplay: root.appleDisplayPresent && modelData.model.startsWith("StudioDisplay")
     readonly property string method: isAppleDisplay ? "apple" : (isDdc ? "ddcutil" : "internal")
 
@@ -352,9 +404,9 @@ Singleton {
         // If there's a queued brightness change, process it now
         if (!isNaN(monitor.queuedBrightness)) {
           Qt.callLater(() => {
-                         monitor.setBrightness(monitor.queuedBrightness);
-                         monitor.queuedBrightness = NaN;
-                       });
+            monitor.setBrightness(monitor.queuedBrightness);
+            monitor.queuedBrightness = NaN;
+          });
         }
       }
     }
@@ -386,8 +438,8 @@ Singleton {
         // When a file change is detected, actively refresh from system
         // to ensure we get the most up-to-date value
         Qt.callLater(() => {
-                       monitor.refreshBrightnessFromSystem();
-                     });
+          monitor.refreshBrightnessFromSystem();
+        });
       }
     }
 
@@ -510,9 +562,9 @@ Singleton {
         var ddcValue = Math.round(value * monitor.maxBrightness);
         var ddcBus = busNum;
         Qt.callLater(() => {
-                       setBrightnessProc.command = ["ddcutil", "-b", ddcBus, "--noverify", "--async", "--enable-dynamic-sleep", "--sleep-multiplier=0.05", "setvcp", "10", ddcValue];
-                       setBrightnessProc.running = true;
-                     });
+          setBrightnessProc.command = ["ddcutil", "-b", ddcBus, "--noverify", "--async", "--enable-dynamic-sleep", "--sleep-multiplier=0.05", "setvcp", "10", ddcValue];
+          setBrightnessProc.running = true;
+        });
       } else if (!isDdc) {
         monitor.commandRunning = true;
         monitor.ignoreNextChange = true;
