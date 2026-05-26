@@ -97,55 +97,37 @@ SmartPanel {
     }
 
     function moveSelection(dir) {
-      var m = NotificationService.historyModel;
-      if (!m || m.count === 0)
+      var items = panelContent.groupedItems || [];
+      var count = items.length;
+      if (count === 0)
         return;
 
       var newIndex = focusIndex;
-      var found = false;
-      var count = m.count;
 
       // If no selection yet, start from beginning (or end if up)
       if (focusIndex === -1) {
-        if (dir > 0)
-          newIndex = -1;
-        else
-          newIndex = count;
+        newIndex = dir > 0 ? -1 : count;
       }
 
-      // Loop to find next visible item
-      var loopCount = 0;
-      while (loopCount < count) {
-        newIndex += dir;
+      newIndex += dir;
 
-        // Bounds check
-        if (newIndex < 0 || newIndex >= count) {
-          break; // Stop at edges
-        }
+      // Bounds check (groupedItems is pre-filtered to currentRange)
+      if (newIndex < 0 || newIndex >= count)
+        return;
 
-        var item = m.get(newIndex);
-        if (item && isInCurrentRange(item.timestamp)) {
-          found = true;
-          break;
-        }
-        loopCount++;
-      }
-
-      if (found) {
-        focusIndex = newIndex;
-        actionIndex = -1; // Reset action selection
-        scrollToItem(focusIndex);
-      }
+      focusIndex = newIndex;
+      actionIndex = -1; // Reset action selection
+      scrollToItem(focusIndex);
     }
 
     function moveAction(dir) {
       if (focusIndex === -1)
         return;
-      var item = NotificationService.historyModel.get(focusIndex);
-      if (!item)
+      var g = (panelContent.groupedItems || [])[focusIndex];
+      if (!g)
         return;
 
-      var actions = parseActions(item.actionsJson);
+      var actions = parseActions(g.primary.actionsJson);
 
       if (actions.length === 0)
         return;
@@ -164,48 +146,57 @@ SmartPanel {
     function activateSelection() {
       if (focusIndex === -1)
         return;
-      var item = NotificationService.historyModel.get(focusIndex);
-      if (!item)
+      var g = (panelContent.groupedItems || [])[focusIndex];
+      if (!g)
         return;
 
       if (actionIndex >= 0) {
-        var actions = parseActions(item.actionsJson);
+        var actions = parseActions(g.primary.actionsJson);
         if (actionIndex < actions.length) {
-          if (NotificationService.invokeAction(item.id, actions[actionIndex].identifier))
+          if (NotificationService.invokeAction(g.primary.id, actions[actionIndex].identifier))
             root.close();
         }
-      } else {
-        var delegate = notificationColumn.children[focusIndex];
-        if (!delegate)
-          return;
-        if (!(delegate.canExpand || delegate.isExpanded))
-          return;
+        return;
+      }
 
-        if (scrollView.expandedId === item.id) {
-          scrollView.expandedId = "";
+      // Group with multiple members: Enter toggles group expansion.
+      if (g.count > 1) {
+        if (scrollView.expandedGroupKey === g.groupKey) {
+          scrollView.expandedGroupKey = "";
         } else {
-          scrollView.expandedId = item.id;
+          scrollView.expandedGroupKey = g.groupKey;
         }
+        return;
+      }
+
+      // Single notification: fall back to per-item expand (when text truncated).
+      var delegate = notificationColumn.children[focusIndex];
+      if (!delegate)
+        return;
+      if (!(delegate.canExpand || delegate.isExpanded))
+        return;
+
+      if (scrollView.expandedId === g.primary.id) {
+        scrollView.expandedId = "";
+      } else {
+        scrollView.expandedId = g.primary.id;
       }
     }
 
     function removeSelection() {
       if (focusIndex === -1)
         return;
-      var item = NotificationService.historyModel.get(focusIndex);
-      if (!item)
+      var g = (panelContent.groupedItems || [])[focusIndex];
+      if (!g)
         return;
 
-      NotificationService.removeFromHistory(item.id);
-      // selection updates automatically?
-      // If we remove item at index i, the next item becomes index i.
-      // So focusIndex is still valid (unless it was last item).
-      // But we should re-verify if it exists.
-      // Actually NotificationService removal might be async or immediate.
-      // If immediate, model count decreases.
-      // We might need to clamp focusIndex.
-      // Let's handle this in a helper or just let the user navigate again.
-      // Better UX: select next available or previous if last.
+      // On a grouped card, Delete clears the whole stack — matches the parent
+      // trash button. For a single notification, just remove that one.
+      if ((g.count || 1) > 1) {
+        dismissGroup(g);
+      } else {
+        NotificationService.removeFromHistory(g.primary.id);
+      }
     }
 
     function scrollToItem(index) {
@@ -257,7 +248,13 @@ SmartPanel {
     // 0 = All, 1 = Today, 2 = Yesterday, 3 = Earlier
     property int currentRange: 1  // start on Today by default
     property bool groupByDate: true
-    onCurrentRangeChanged: resetFocus()
+    property bool groupByApp: true
+    property var groupedItems: []
+    onCurrentRangeChanged: {
+      resetFocus();
+      recomputeGroups();
+    }
+    onGroupByAppChanged: recomputeGroups()
 
     // Keyboard navigation state
     property int focusIndex: -1
@@ -343,8 +340,107 @@ SmartPanel {
       return false;
     }
 
+    // Dismiss every member of a group (primary + extras).
+    function dismissGroup(g) {
+      if (!g)
+        return;
+      var ids = [g.primary.id];
+      var ex = g.extras || [];
+      for (var i = 0; i < ex.length; ++i)
+        ids.push(ex[i].id);
+      // Iterate snapshot-of-ids so the live recompute that happens between
+      // removals doesn't affect what we iterate over.
+      for (var j = 0; j < ids.length; ++j)
+        NotificationService.removeFromHistory(ids[j]);
+    }
+
+    // Snapshot a historyModel item into a plain JS object so it can live in a
+    // grouped JS array (binding to role objects across re-grouping is fragile).
+    function snapshotItem(item) {
+      return {
+        id: item.id,
+        appName: item.appName || "",
+        summary: item.summary || "",
+        body: item.body || "",
+        summaryMarkdown: item.summaryMarkdown || "",
+        bodyMarkdown: item.bodyMarkdown || "",
+        urgency: item.urgency,
+        timestamp: item.timestamp,
+        cachedImage: item.cachedImage || "",
+        originalImage: item.originalImage || "",
+        actionsJson: item.actionsJson || "[]"
+      };
+    }
+
+    // Bucket history items by (appName + calendar-day) into groups. The newest
+    // item in each bucket becomes the group's primary; the rest are extras
+    // (already newest-first because historyModel is newest-first).
+    function recomputeGroups() {
+      var m = NotificationService.historyModel;
+      if (!m || m.count === 0) {
+        panelContent.groupedItems = [];
+        return;
+      }
+
+      // Grouping off: one single-member group per item so the delegate stays uniform.
+      if (!groupByApp) {
+        var flat = [];
+        for (var i = 0; i < m.count; ++i) {
+          var it = m.get(i);
+          if (!it || typeof it.timestamp === "undefined")
+            continue;
+          if (!isInCurrentRange(it.timestamp))
+            continue;
+          flat.push({
+                      "groupKey": String(it.id),
+                      "appName": it.appName || "",
+                      "primary": snapshotItem(it),
+                      "extras": [],
+                      "count": 1
+                    });
+        }
+        panelContent.groupedItems = flat;
+        return;
+      }
+
+      var byKey = {};
+      var order = [];
+
+      for (var j = 0; j < m.count; ++j) {
+        var item = m.get(j);
+        if (!item || typeof item.timestamp === "undefined")
+          continue;
+        if (!isInCurrentRange(item.timestamp))
+          continue;
+
+        var dateKey = getDateKey(new Date(item.timestamp));
+        var appKey = (item.appName || "").toLowerCase();
+        var key = appKey + "::" + dateKey;
+
+        if (!byKey[key]) {
+          byKey[key] = {
+            "groupKey": key,
+            "appName": item.appName || "",
+            "primary": snapshotItem(item),
+            "extras": [],
+            "count": 1
+          };
+          order.push(key);
+        } else {
+          byKey[key].extras.push(snapshotItem(item));
+          byKey[key].count += 1;
+        }
+      }
+
+      var out = [];
+      for (var k = 0; k < order.length; ++k)
+        out.push(byKey[order[k]]);
+      panelContent.groupedItems = out;
+    }
+
     Component.onCompleted: {
       recalcRangeCounts();
+      recomputeGroups();
       // Initialize lastKnownDate
       lastKnownDate = getDateKey(new Date());
     }
@@ -353,6 +449,7 @@ SmartPanel {
       target: NotificationService.historyModel
       function onCountChanged() {
         panelContent.recalcRangeCounts();
+        panelContent.recomputeGroups();
       }
     }
 
@@ -500,8 +597,10 @@ SmartPanel {
           reserveScrollbarSpace: false
           gradientColor: Color.mSurface
 
-          // Track which notification is expanded
+          // Track which notification is expanded (truncated text reveal)
           property string expandedId: ""
+          // Track which app-group is expanded (extras list reveal)
+          property string expandedGroupKey: ""
 
           ColumnLayout {
             width: panelContent.layoutWidth
@@ -565,17 +664,25 @@ SmartPanel {
                 spacing: Style.marginM
 
                 Repeater {
-                  model: NotificationService.historyModel
+                  model: panelContent.groupedItems
 
                   delegate: Item {
                     id: notificationDelegate
                     width: parent.width
-                    visible: panelContent.isInCurrentRange(model.timestamp)
-                    height: visible && !isRemoving ? contentColumn.height + Style.margin2M : 0
+                    visible: !isRemoving
+                    height: visible ? contentColumn.height + Style.margin2M : 0
+
+                    // Group payload. `modelData` and `index` are injected by Repeater.
+                    property var primary: modelData.primary
+                    property var extras: modelData.extras || []
+                    property string groupKey: modelData.groupKey
+                    property int groupCount: modelData.count || 1
+                    property bool isGroup: groupCount > 1
+                    property bool isGroupExpanded: scrollView.expandedGroupKey === groupKey
 
                     property int listIndex: index
-                    property string notificationId: model.id
-                    property string appName: model.appName || ""
+                    property string notificationId: primary.id
+                    property string appName: primary.appName || ""
                     property bool isExpanded: scrollView.expandedId === notificationId
                     property bool canExpand: summaryText.truncated || bodyText.truncated
                     property real swipeOffset: 0
@@ -589,7 +696,9 @@ SmartPanel {
                     readonly property int removeAnimationDuration: Style.animationNormal
                     readonly property int notificationTextFormat: (Settings.data.notifications.enableMarkdown && notificationDelegate.isExpanded) ? Text.MarkdownText : Text.StyledText
                     readonly property real actionButtonSize: Style.baseWidgetSize * 0.7
-                    readonly property real buttonClusterWidth: notificationDelegate.actionButtonSize * 2 + Style.marginXS
+                    readonly property int buttonClusterCount: notificationDelegate.isGroup ? 3 : 2
+                    readonly property real buttonClusterWidth: notificationDelegate.actionButtonSize * buttonClusterCount
+                                                               + Style.marginXS * Math.max(0, buttonClusterCount - 1)
                     readonly property real iconSize: Math.round(40 * Style.uiScaleRatio)
 
                     function isSafeLink(link) {
@@ -644,7 +753,10 @@ SmartPanel {
                       isSwiping = false;
 
                       if (Settings.data.general.animationDisabled) {
-                        NotificationService.removeFromHistory(notificationId);
+                        if (notificationDelegate.isGroup)
+                          panelContent.dismissGroup(modelData);
+                        else
+                          NotificationService.removeFromHistory(notificationId);
                         return;
                       }
 
@@ -657,7 +769,12 @@ SmartPanel {
                       id: removeTimer
                       interval: notificationDelegate.removeAnimationDuration
                       repeat: false
-                      onTriggered: NotificationService.removeFromHistory(notificationId)
+                      onTriggered: {
+                        if (notificationDelegate.isGroup)
+                          panelContent.dismissGroup(modelData);
+                        else
+                          NotificationService.removeFromHistory(notificationId);
+                      }
                     }
 
                     Behavior on swipeOffset {
@@ -693,7 +810,7 @@ SmartPanel {
                     }
 
                     // Parse actions safely
-                    property var actionsList: parseActions(model.actionsJson)
+                    property var actionsList: parseActions(notificationDelegate.primary.actionsJson)
 
                     property bool isFocused: index === panelContent.focusIndex
 
@@ -853,7 +970,7 @@ SmartPanel {
                           width: notificationDelegate.iconSize
                           height: notificationDelegate.iconSize
                           radius: Math.min(Style.radiusL, width / 2)
-                          imagePath: model.cachedImage || model.originalImage || ""
+                          imagePath: notificationDelegate.primary.cachedImage || notificationDelegate.primary.originalImage || ""
                           borderColor: "transparent"
                           borderWidth: 0
                           fallbackIcon: "bell"
@@ -876,11 +993,11 @@ SmartPanel {
                               height: 6
                               anchors.verticalCenter: parent.verticalCenter
                               radius: 3
-                              visible: model.urgency !== 1
+                              visible: notificationDelegate.primary.urgency !== 1
                               color: {
-                                if (model.urgency === 2)
+                                if (notificationDelegate.primary.urgency === 2)
                                   return Color.mError;
-                                else if (model.urgency === 0)
+                                else if (notificationDelegate.primary.urgency === 0)
                                   return Color.mOnSurfaceVariant;
                                 else
                                   return "transparent";
@@ -888,15 +1005,34 @@ SmartPanel {
                             }
 
                             NText {
-                              text: model.appName || "Unknown App"
+                              text: notificationDelegate.primary.appName || "Unknown App"
                               pointSize: Style.fontSizeXS
                               font.weight: Style.fontWeightBold
                               color: Color.mSecondary
                             }
 
+                            // Group count pill (e.g. "3") — shown only when the group has extras.
+                            Rectangle {
+                              visible: notificationDelegate.isGroup
+                              anchors.verticalCenter: parent.verticalCenter
+                              implicitHeight: Math.round(14 * Style.uiScaleRatio)
+                              implicitWidth: Math.max(implicitHeight, countLabel.implicitWidth + Style.marginS * 2)
+                              radius: implicitHeight / 2
+                              color: Color.mPrimary
+
+                              NText {
+                                id: countLabel
+                                anchors.centerIn: parent
+                                text: notificationDelegate.groupCount
+                                pointSize: Style.fontSizeXXS
+                                font.weight: Style.fontWeightBold
+                                color: Color.mOnPrimary
+                              }
+                            }
+
                             NText {
                               textFormat: Text.PlainText
-                              text: " " + Time.formatRelativeTime(model.timestamp)
+                              text: " " + Time.formatRelativeTime(notificationDelegate.primary.timestamp)
                               pointSize: Style.fontSizeXXS
                               color: Color.mOnSurfaceVariant
                               anchors.bottom: parent.bottom
@@ -907,7 +1043,7 @@ SmartPanel {
                           NText {
                             id: summaryText
                             width: parent.width
-                            text: (Settings.data.notifications.enableMarkdown && notificationDelegate.isExpanded) ? (model.summaryMarkdown || I18n.tr("common.no-summary")) : (model.summary || I18n.tr("common.no-summary"))
+                            text: (Settings.data.notifications.enableMarkdown && notificationDelegate.isExpanded) ? (notificationDelegate.primary.summaryMarkdown || I18n.tr("common.no-summary")) : (notificationDelegate.primary.summary || I18n.tr("common.no-summary"))
                             pointSize: Style.fontSizeM
                             color: Color.mOnSurface
                             textFormat: notificationDelegate.notificationTextFormat
@@ -920,7 +1056,7 @@ SmartPanel {
                           NText {
                             id: bodyText
                             width: parent.width
-                            text: (Settings.data.notifications.enableMarkdown && notificationDelegate.isExpanded) ? (model.bodyMarkdown || "") : (model.body || "")
+                            text: (Settings.data.notifications.enableMarkdown && notificationDelegate.isExpanded) ? (notificationDelegate.primary.bodyMarkdown || "") : (notificationDelegate.primary.body || "")
                             pointSize: Style.fontSizeS
                             color: Color.mOnSurfaceVariant
                             textFormat: notificationDelegate.notificationTextFormat
@@ -996,14 +1132,134 @@ SmartPanel {
                               }
                             }
 
-                            // Delete button
+                            // Group expand/collapse — only present when the group has extras.
                             NIconButton {
-                              icon: "trash"
-                              tooltipText: I18n.tr("tooltips.delete-notification")
+                              id: groupExpandButton
+                              visible: notificationDelegate.isGroup
+                              icon: notificationDelegate.isGroupExpanded ? "chevrons-up" : "chevrons-down"
+                              tooltipText: notificationDelegate.isGroupExpanded ? (I18n.tr("notifications.panel.click-to-collapse") || "Click to collapse") : (I18n.tr("notifications.panel.click-to-expand") || "Click to expand")
                               baseSize: notificationDelegate.actionButtonSize
 
                               onClicked: {
-                                NotificationService.removeFromHistory(notificationId);
+                                notificationDelegate.pendingLink = "";
+                                historyInteractionArea.cursorShape = Qt.ArrowCursor;
+                                if (scrollView.expandedGroupKey === notificationDelegate.groupKey) {
+                                  scrollView.expandedGroupKey = "";
+                                } else {
+                                  scrollView.expandedGroupKey = notificationDelegate.groupKey;
+                                }
+                              }
+                            }
+
+                            // Delete button — dismisses the entire stack on a grouped card.
+                            NIconButton {
+                              icon: "trash"
+                              tooltipText: notificationDelegate.isGroup
+                                           ? (I18n.tr("tooltips.delete-notification") + " (" + notificationDelegate.groupCount + ")")
+                                           : I18n.tr("tooltips.delete-notification")
+                              baseSize: notificationDelegate.actionButtonSize
+
+                              onClicked: {
+                                if (notificationDelegate.isGroup) {
+                                  panelContent.dismissGroup(modelData);
+                                } else {
+                                  NotificationService.removeFromHistory(notificationId);
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+
+                      // Older members of the same app-group, revealed when expanded.
+                      // NOTE: must not use anchors here — contentColumn is a Column positioner,
+                      // and anchored children get ignored from its height calc (card outline wouldn't grow).
+                      Column {
+                        id: extrasColumn
+                        width: parent.width
+                        spacing: Style.marginXS
+                        visible: notificationDelegate.isGroup && notificationDelegate.isGroupExpanded
+
+                        Repeater {
+                          model: notificationDelegate.extras
+
+                          delegate: Rectangle {
+                            id: extraRow
+                            required property var modelData
+                            width: parent.width
+                            implicitHeight: Math.max(extraTrash.height, extraTextCol.implicitHeight) + Style.marginXS * 2
+                            color: extraHover.containsMouse ? Qt.alpha(Color.mOnSurface, Style.opacityLight) : "transparent"
+                            radius: Style.radiusS
+
+                            // Click-target sits BELOW the children so the trash button stays clickable.
+                            MouseArea {
+                              id: extraHover
+                              anchors.fill: parent
+                              anchors.rightMargin: extraTrash.width + Style.marginS
+                              hoverEnabled: true
+                              cursorShape: Qt.PointingHandCursor
+                              onClicked: {
+                                var actions = parseActions(extraRow.modelData.actionsJson);
+                                var hasDefault = actions.some(function (a) {
+                                  return a.identifier === "default";
+                                });
+                                if (hasDefault && NotificationService.invokeAction(extraRow.modelData.id, "default")) {
+                                  root.close();
+                                } else {
+                                  NotificationService.focusSenderWindow(extraRow.modelData.appName);
+                                  root.close();
+                                }
+                              }
+                            }
+
+                            NIconButton {
+                              id: extraTrash
+                              icon: "trash"
+                              tooltipText: I18n.tr("tooltips.delete-notification")
+                              baseSize: notificationDelegate.actionButtonSize
+                              anchors.right: parent.right
+                              anchors.rightMargin: Style.marginXS
+                              anchors.verticalCenter: parent.verticalCenter
+                              onClicked: NotificationService.removeFromHistory(extraRow.modelData.id)
+                            }
+
+                            NText {
+                              id: extraTime
+                              textFormat: Text.PlainText
+                              text: Time.formatRelativeTime(extraRow.modelData.timestamp)
+                              pointSize: Style.fontSizeXXS
+                              color: Color.mOnSurfaceVariant
+                              anchors.right: extraTrash.left
+                              anchors.rightMargin: Style.marginS
+                              anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Column {
+                              id: extraTextCol
+                              anchors.left: parent.left
+                              anchors.right: extraTime.left
+                              anchors.leftMargin: notificationDelegate.iconSize + Style.marginM
+                              anchors.rightMargin: Style.marginS
+                              anchors.verticalCenter: parent.verticalCenter
+                              spacing: 0
+
+                              NText {
+                                width: parent.width
+                                text: extraRow.modelData.summary || I18n.tr("common.no-summary")
+                                pointSize: Style.fontSizeS
+                                color: Color.mOnSurface
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                              }
+
+                              NText {
+                                width: parent.width
+                                visible: (extraRow.modelData.body || "").length > 0
+                                text: extraRow.modelData.body || ""
+                                pointSize: Style.fontSizeXS
+                                color: Color.mOnSurfaceVariant
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
                               }
                             }
                           }
