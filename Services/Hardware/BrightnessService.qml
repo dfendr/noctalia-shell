@@ -12,6 +12,12 @@ Singleton {
   readonly property list<Monitor> monitors: variants.instances
   property bool appleDisplayPresent: false
   property list<var> availableBacklightDevices: []
+  // When a monitor reconnects, its DDC link can still be negotiating during
+  // the immediate `ddcutil detect` run — that bus comes back marked
+  // "Invalid display" and gets filtered out below, leaving the reconnected
+  // monitor with no DDC entry. We schedule a second detect a few seconds
+  // later to catch handshakes that settled after the first probe.
+  property bool ddcRescanPending: false
 
   function getMonitorForScreen(screen: ShellScreen): var {
     return monitors.find(m => m.modelData === screen);
@@ -160,7 +166,35 @@ Singleton {
     ddcMonitors = [];
     scanBacklightDevices();
     if (Settings.data.brightness.enableDdcSupport) {
-      ddcProc.running = true;
+      // If detect is already running, mark a re-run for when it finishes —
+      // setting running=true on an active Process is a no-op, so the
+      // in-flight scan would otherwise be the last word with stale data.
+      if (ddcProc.running) {
+        ddcRescanPending = true;
+      } else {
+        ddcProc.running = true;
+      }
+      // Always schedule a settle-delay rescan to catch DDC handshakes that
+      // were mid-negotiation during the immediate detect.
+      ddcSettleTimer.restart();
+    }
+  }
+
+  // Re-run detect a few seconds after a monitor change. ddcutil can mark a
+  // bus "Invalid display" if the DDC link wasn't fully up when probed; by
+  // the time this fires the handshake is almost always complete.
+  Timer {
+    id: ddcSettleTimer
+    interval: 3000
+    repeat: false
+    onTriggered: {
+      if (!Settings.data.brightness.enableDdcSupport)
+        return;
+      if (ddcProc.running) {
+        ddcRescanPending = true;
+      } else {
+        ddcProc.running = true;
+      }
     }
   }
 
@@ -255,6 +289,18 @@ Singleton {
           };
         });
         root.ddcMonitors = ddcProc.ddcMonitors.filter(m => m.isDdc);
+
+        // Honor any rescan request that arrived while this run was in
+        // flight — onMonitorsChanged and ddcSettleTimer both set this flag
+        // when ddcProc was already running, since starting an already-
+        // running Process is a no-op.
+        if (root.ddcRescanPending) {
+          root.ddcRescanPending = false;
+          Qt.callLater(() => {
+            if (Settings.data.brightness.enableDdcSupport && !ddcProc.running)
+              ddcProc.running = true;
+          });
+        }
       }
     }
   }
