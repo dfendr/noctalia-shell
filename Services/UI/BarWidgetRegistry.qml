@@ -68,6 +68,7 @@ Singleton {
                                      "PowerProfile": "WidgetSettings/PowerProfileSettings.qml",
                                      "SessionMenu": "WidgetSettings/SessionMenuSettings.qml",
                                      "Settings": "WidgetSettings/SettingsSettings.qml",
+                                     "Scratchpad": "WidgetSettings/ScratchpadSettings.qml",
                                      "Spacer": "WidgetSettings/SpacerSettings.qml",
                                      "SystemMonitor": "WidgetSettings/SystemMonitorSettings.qml",
                                      "Taskbar": "WidgetSettings/TaskbarSettings.qml",
@@ -230,6 +231,7 @@ Singleton {
                                     "iconColor": "none"
                                   },
                                   "Scratchpad": {
+                                    "icon": "prompt",
                                     "iconColor": "none",
                                     "textColor": "none"
                                   },

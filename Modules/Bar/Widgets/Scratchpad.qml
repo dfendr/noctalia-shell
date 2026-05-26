@@ -45,6 +45,7 @@ Item {
 
   readonly property string barPosition: Settings.getBarPositionForScreen(screenName)
   readonly property bool isBarVertical: barPosition === "left" || barPosition === "right"
+  readonly property string iconKey: widgetSettings.icon !== undefined ? widgetSettings.icon : (widgetMetadata.icon || "prompt")
   readonly property string iconColorKey: widgetSettings.iconColor !== undefined ? widgetSettings.iconColor : widgetMetadata.iconColor
   readonly property string textColorKey: widgetSettings.textColor !== undefined ? widgetSettings.textColor : widgetMetadata.textColor
 
@@ -103,7 +104,7 @@ Item {
   BarPill {
     id: pill
     screen: root.screen
-    icon: "prompt"
+    icon: root.iconKey
     oppositeDirection: BarService.getPillDirection(root)
     customIconColor: root.shownHere ? Color.mPrimary : Color.resolveColorKeyOptional(root.iconColorKey)
     customTextColor: Color.resolveColorKeyOptional(root.textColorKey)
