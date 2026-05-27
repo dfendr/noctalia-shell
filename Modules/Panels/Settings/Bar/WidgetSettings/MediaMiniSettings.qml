@@ -26,6 +26,7 @@ ColumnLayout {
   property string valueVisualizerType: widgetData.visualizerType !== undefined ? widgetData.visualizerType : widgetMetadata.visualizerType
   property string valueScrollingMode: widgetData.scrollingMode !== undefined ? widgetData.scrollingMode : widgetMetadata.scrollingMode
   property int valueMaxWidth: widgetData.maxWidth !== undefined ? widgetData.maxWidth : widgetMetadata.maxWidth
+  property int valueHideBelowScreenWidth: widgetData.hideBelowScreenWidth !== undefined ? widgetData.hideBelowScreenWidth : widgetMetadata.hideBelowScreenWidth
   property bool valueUseFixedWidth: widgetData.useFixedWidth !== undefined ? widgetData.useFixedWidth : widgetMetadata.useFixedWidth
   property bool valueShowProgressRing: widgetData.showProgressRing !== undefined ? widgetData.showProgressRing : widgetMetadata.showProgressRing
   property bool valueCompactMode: widgetData.compactMode !== undefined ? widgetData.compactMode : widgetMetadata.compactMode
@@ -48,6 +49,7 @@ ColumnLayout {
     settings.visualizerType = valueVisualizerType;
     settings.scrollingMode = valueScrollingMode;
     settings.maxWidth = parseInt(widthInput.text) || widgetMetadata.maxWidth;
+    settings.hideBelowScreenWidth = parseInt(hideBelowScreenWidthInput.text) || 0;
     settings.useFixedWidth = valueUseFixedWidth;
     settings.showProgressRing = valueShowProgressRing;
     settings.compactMode = valueCompactMode;
@@ -165,6 +167,17 @@ ColumnLayout {
                  saveSettings();
                }
     defaultValue: widgetMetadata.useFixedWidth
+  }
+
+  NTextInput {
+    id: hideBelowScreenWidthInput
+    Layout.fillWidth: true
+    label: I18n.tr("bar.media-mini.hide-below-screen-width-label")
+    description: I18n.tr("bar.media-mini.hide-below-screen-width-description")
+    placeholderText: "0"
+    text: valueHideBelowScreenWidth
+    onTextChanged: saveSettings()
+    defaultValue: String(widgetMetadata.hideBelowScreenWidth)
   }
 
   NToggle {

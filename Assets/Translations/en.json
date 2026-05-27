@@ -188,6 +188,8 @@
       "compact-mode-description": "Enable a space-saving layout for the media player panel.",
       "compact-mode-label": "Compact mode",
       "hide-mode-description": "Controls how the widget behaves when no media is playing.",
+      "hide-below-screen-width-label": "Hide below screen width",
+      "hide-below-screen-width-description": "Hide the widget when the current monitor is narrower than this many pixels. Useful for portrait monitors. 0 disables.",
       "max-width-description": "Sets the maximum horizontal size of the widget. The widget will shrink to fit shorter content.",
       "no-active-player": "No active player",
       "panel-section-description": "Configure the appearance and behavior of the media player panel.",

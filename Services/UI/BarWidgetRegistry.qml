@@ -201,6 +201,7 @@ Singleton {
                                     "scrollingMode": "hover",
                                     "maxWidth": 145,
                                     "useFixedWidth": false,
+                                    "hideBelowScreenWidth": 0,
                                     "hideWhenIdle": false,
                                     "showAlbumArt": true,
                                     "showArtistFirst": true,

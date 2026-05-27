@@ -49,6 +49,7 @@ Item {
   readonly property bool showProgressRing: widgetSettings.showProgressRing !== undefined ? widgetSettings.showProgressRing : widgetMetadata.showProgressRing
   readonly property bool useFixedWidth: widgetSettings.useFixedWidth !== undefined ? widgetSettings.useFixedWidth : widgetMetadata.useFixedWidth
   readonly property real maxWidth: widgetSettings.maxWidth !== undefined ? widgetSettings.maxWidth : Math.max(widgetMetadata.maxWidth, screen ? screen.width * 0.06 : 0)
+  readonly property int hideBelowScreenWidth: widgetSettings.hideBelowScreenWidth !== undefined ? widgetSettings.hideBelowScreenWidth : widgetMetadata.hideBelowScreenWidth
   readonly property string textColorKey: widgetSettings.textColor !== undefined ? widgetSettings.textColor : widgetMetadata.textColor
   readonly property color textColor: Color.resolveColorKey(textColorKey)
 
@@ -62,7 +63,8 @@ Item {
   readonly property bool hasPlayer: MediaService.currentPlayer !== null
   readonly property bool shouldHideIdle: (hideMode === "idle" || hideWhenIdle) && !MediaService.isPlaying
   readonly property bool shouldHideEmpty: !hasPlayer && hideMode === "hidden"
-  readonly property bool isHidden: shouldHideIdle || shouldHideEmpty
+  readonly property bool shouldHideNarrowScreen: hideBelowScreenWidth > 0 && screen !== null && screen.width < hideBelowScreenWidth
+  readonly property bool isHidden: shouldHideIdle || shouldHideEmpty || shouldHideNarrowScreen
 
   // Title
   readonly property string title: {
@@ -105,7 +107,7 @@ Item {
   // For vertical bars, collapse to 0 when hidden
   implicitWidth: isVertical ? (isHidden ? 0 : verticalSize) : (isHidden ? 0 : contentWidth)
   implicitHeight: isVertical ? (isHidden ? 0 : verticalSize) : capsuleHeight
-  visible: !shouldHideIdle && (hideMode !== "hidden" || opacity > 0)
+  visible: !shouldHideIdle && !shouldHideNarrowScreen && (hideMode !== "hidden" || opacity > 0)
   opacity: isHidden ? 0.0 : ((hideMode === "transparent" && !hasPlayer) ? 0.0 : 1.0)
 
   property real mainContentWidth: 0
@@ -334,7 +336,6 @@ Item {
           cursorShape: hasPlayer ? Qt.PointingHandCursor : Qt.ArrowCursor
           maxWidth: root.maxWidth - root.mainContentWidth
           forcedHover: mainMouseArea.containsMouse
-          fadeExtent: 0.1
           fadeCornerRadius: Style.radiusM
 
           NText {

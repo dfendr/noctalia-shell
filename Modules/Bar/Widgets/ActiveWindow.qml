@@ -278,7 +278,6 @@ Item {
             return NScrollText.ScrollMode.Never;
           }
           forcedHover: mainMouseArea.containsMouse
-          fadeExtent: 0.1
           fadeCornerRadius: Style.radiusM
 
           NText {

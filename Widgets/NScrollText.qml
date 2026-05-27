@@ -61,7 +61,11 @@ Item {
   implicitWidth: alwaysMaxWidth ? maxWidth : Math.min(maxWidth, contentWidth)
   implicitHeight: titleText.height
 
-  layer.enabled: contentWidth > maxWidth
+  // Clip the overflowing marquee duplicate when the mask layer is off
+  // (the mask used to do this implicitly via its bounding rect).
+  clip: contentWidth > maxWidth && fadeExtent <= 0
+
+  layer.enabled: contentWidth > maxWidth && fadeExtent > 0
   layer.effect: MultiEffect {
     maskEnabled: true
     maskThresholdMin: 0.5
