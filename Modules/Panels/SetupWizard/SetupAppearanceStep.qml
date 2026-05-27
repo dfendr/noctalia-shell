@@ -353,8 +353,9 @@ ColumnLayout {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                   Settings.data.colorSchemes.useWallpaperColors = false;
-                  Settings.data.colorSchemes.predefinedScheme = schemeItem.schemeName;
-                  ColorSchemeService.applyScheme(Settings.data.colorSchemes.predefinedScheme);
+                  // Downstream fork: route through setPredefinedScheme so
+                  // themectl re-skins the whole desktop on selection.
+                  ColorSchemeService.setPredefinedScheme(schemeItem.schemeName);
                 }
               }
             }

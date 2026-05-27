@@ -21,22 +21,11 @@ ColumnLayout {
 
   signal openDownloadPopup
 
+  // Downstream fork: schemes are now <slug>/palette.json under themectl's
+  // themes dir, so the slug lives in the parent dir name. Delegate to
+  // ColorSchemeService for the canonical extraction.
   function extractSchemeName(schemePath) {
-    var pathParts = schemePath.split("/");
-    var filename = pathParts[pathParts.length - 1];
-    var schemeName = filename.replace(".json", "");
-
-    if (schemeName === "Noctalia-default") {
-      schemeName = "Noctalia (default)";
-    } else if (schemeName === "Noctalia-legacy") {
-      schemeName = "Noctalia (legacy)";
-    } else if (schemeName === "Tokyo-Night") {
-      schemeName = "Tokyo Night";
-    } else if (schemeName === "Rosepine") {
-      schemeName = "Rose Pine";
-    }
-
-    return schemeName;
+    return ColorSchemeService.getBasename(schemePath);
   }
 
   function getSchemeColor(schemeName, colorKey) {
@@ -338,6 +327,10 @@ ColumnLayout {
 
           property string schemePath: modelData
           property string schemeName: root.extractSchemeName(modelData)
+          // Downstream fork: pretty label rendered in the UI (e.g.
+          // "rose-pine-dawn" → "Rose Pine Dawn"). schemeName remains the
+          // canonical slug used for click handling and predefinedScheme.
+          property string schemeLabel: ColorSchemeService.getDisplayName(schemeName)
 
           opacity: enabled ? 1.0 : 0.6
           Layout.fillWidth: true
@@ -363,7 +356,7 @@ ColumnLayout {
             spacing: Style.marginS
 
             NText {
-              text: schemeItem.schemeName
+              text: schemeItem.schemeLabel
               pointSize: Style.fontSizeS
               color: Color.mOnSurface
               Layout.fillWidth: true
@@ -414,8 +407,9 @@ ColumnLayout {
               Settings.data.colorSchemes.useWallpaperColors = false;
               Logger.i("ColorSchemeTab", "Disabled wallpaper colors");
 
-              Settings.data.colorSchemes.predefinedScheme = schemeItem.schemeName;
-              ColorSchemeService.applyScheme(Settings.data.colorSchemes.predefinedScheme);
+              // Downstream fork: route through setPredefinedScheme so the
+              // themectl bridge fires alongside noctalia's own apply.
+              ColorSchemeService.setPredefinedScheme(schemeItem.schemeName);
             }
           }
 

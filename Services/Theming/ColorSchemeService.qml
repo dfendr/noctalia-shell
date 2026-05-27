@@ -13,8 +13,14 @@ Singleton {
 
   property var schemes: []
   property bool scanning: false
-  property string schemesDirectory: Quickshell.shellDir + "/Assets/ColorScheme"
-  property string downloadedSchemesDirectory: Settings.configDir + "colorschemes"
+  // Downstream fork: the scheme library is sourced from themectl's themes
+  // dir instead of noctalia's bundled Assets/ColorScheme. Each theme lives
+  // at <themesDirectory>/<slug>/palette.json with a sibling metadata.json
+  // (defaultMode + displayName). themectl applies the same palette to
+  // ghostty/hypr/walker/btop/alacritty/firefox, so anything in the noctalia
+  // UI is in lockstep with the rest of the desktop.
+  property string schemesDirectory: (Quickshell.env("XDG_DATA_HOME") || (Quickshell.env("HOME") + "/.local/share")) + "/themes"
+  property string downloadedSchemesDirectory: schemesDirectory
   property string colorsJsonFilePath: Settings.configDir + "colors.json"
   // Last successfully parsed predefined scheme JSON (full object). Used to refresh app templates
   // on wallpaper changes without re-running applyScheme (avoids rewriting colors.json when unchanged).
@@ -38,6 +44,10 @@ Singleton {
       if (!Settings.data.colorSchemes.useWallpaperColors && Settings.data.colorSchemes.predefinedScheme) {
         // Re-apply current scheme to pick the right variant
         applyScheme(Settings.data.colorSchemes.predefinedScheme);
+        // Downstream fork: also propagate the mode flip to themectl so
+        // ghostty/hypr/walker/btop/alacritty/firefox follow noctalia's
+        // day/night transition.
+        root._runThemectl(Settings.data.colorSchemes.predefinedScheme);
       }
       root.pushSystemColorScheme();
       // Toast: dark/light mode switched
@@ -60,32 +70,39 @@ Singleton {
     Logger.d("ColorScheme", "Load colorScheme");
     scanning = true;
     schemes = [];
-    // Use find command to locate all scheme.json files in both directories
-    // First ensure the downloaded schemes directory exists
-    Quickshell.execDetached(["mkdir", "-p", downloadedSchemesDirectory]);
-    // Find in both preinstalled and downloaded directories
-    findProcess.command = ["find", "-L", schemesDirectory, downloadedSchemesDirectory, "-mindepth", "2", "-name", "*.json", "-type", "f"];
+    Quickshell.execDetached(["mkdir", "-p", schemesDirectory]);
+    // Downstream fork: scan themectl's themes dir. Each theme is
+    // <slug>/palette.json — slug is the canonical identifier.
+    findProcess.command = ["find", "-L", schemesDirectory, "-mindepth", "2", "-maxdepth", "2", "-name", "palette.json", "-type", "f"];
     findProcess.running = true;
   }
 
+  // Downstream: returns the slug (parent dir name) for a path or pass-through
+  // if already a bare slug. The "basename" terminology here is historical —
+  // since every file is palette.json the slug lives in the parent dir.
   function getBasename(path) {
     if (!path)
       return "";
-    var chunks = path.split("/");
-    // Get the filename without extension
-    var filename = chunks[chunks.length - 1];
-    var schemeName = filename.replace(".json", "");
-    // Convert back to display names for special cases
-    if (schemeName === "Noctalia-default") {
-      return "Noctalia (default)";
-    } else if (schemeName === "Noctalia-legacy") {
-      return "Noctalia (legacy)";
-    } else if (schemeName === "Tokyo-Night") {
-      return "Tokyo Night";
-    } else if (schemeName === "Rosepine") {
-      return "Rose Pine";
+    if (path.indexOf("/") === -1) {
+      // Already a slug; keep as-is
+      return path;
     }
-    return schemeName;
+    var chunks = path.split("/");
+    // path = ".../themes/<slug>/palette.json"; slug is the second-to-last segment
+    if (chunks.length >= 2) {
+      return chunks[chunks.length - 2];
+    }
+    return chunks[chunks.length - 1].replace(".json", "");
+  }
+
+  // Downstream: pretty UI label from a slug — "rose-pine-dawn" → "Rose Pine Dawn".
+  function getDisplayName(slugOrPath) {
+    var slug = getBasename(slugOrPath);
+    if (!slug)
+      return "";
+    return slug.split("-").map(function (part) {
+                                return part.charAt(0).toUpperCase() + part.slice(1);
+                              }).join(" ");
   }
 
   function resolveSchemePath(nameOrPath) {
@@ -94,40 +111,25 @@ Singleton {
     if (nameOrPath.indexOf("/") !== -1) {
       return nameOrPath;
     }
-    // Handle special cases for Noctalia schemes
-    var schemeName = nameOrPath.replace(".json", "");
-    if (schemeName === "Noctalia (default)") {
-      schemeName = "Noctalia-default";
-    } else if (schemeName === "Noctalia (legacy)") {
-      schemeName = "Noctalia-legacy";
-    } else if (schemeName === "Tokyo Night") {
-      schemeName = "Tokyo-Night";
-    } else if (schemeName === "Rose Pine") {
-      schemeName = "Rosepine";
-    }
-    // Check preinstalled directory first, then downloaded directory
-    var preinstalledPath = schemesDirectory + "/" + schemeName + "/" + schemeName + ".json";
-    var downloadedPath = downloadedSchemesDirectory + "/" + schemeName + "/" + schemeName + ".json";
-    // Try to find the scheme in the loaded schemes list to determine which directory it's in
+    var slug = nameOrPath.replace(".json", "");
+    var canonical = schemesDirectory + "/" + slug + "/palette.json";
+    // Prefer an exact match in the scanned schemes list.
     for (var i = 0; i < schemes.length; i++) {
-      if (schemes[i].indexOf("/" + schemeName + "/") !== -1 || schemes[i].indexOf("/" + schemeName + ".json") !== -1) {
+      if (schemes[i] === canonical || schemes[i].indexOf("/" + slug + "/") !== -1) {
         return schemes[i];
       }
     }
-    // Fallback: prefer preinstalled, then downloaded
-    return preinstalledPath;
+    return canonical;
   }
 
-  // Downstream fork patch: maps a noctalia scheme basename to a themectl
-  // slug. Returns null if no themectl theme corresponds to this scheme.
-  function _themectlSlugFor(basename) {
-    // Hardcoded renames where noctalia and themectl disagree on spelling.
-    if (basename === "Rosepine") return "rose-pine";
-    if (basename === "Tokyo-Night") return "tokyo-night";
-    // Noctalia's own themes that themectl doesn't ship.
-    if (basename === "Noctalia-default" || basename === "Noctalia-legacy" ||
-        basename === "Dracula" || basename === "Eldritch") return null;
-    return basename.toLowerCase();
+  // Downstream fork: invoke themectl for the given slug with the active
+  // dark/light mode. Used by both the user-driven setPredefinedScheme
+  // path and the day/night dark-mode-flip Connection below.
+  function _runThemectl(slug) {
+    if (!slug)
+      return;
+    var mode = Settings.data.colorSchemes.darkMode ? "dark" : "light";
+    Quickshell.execDetached(["themectl", "set", slug, "--mode", mode]);
   }
 
   function applyScheme(nameOrPath) {
@@ -155,16 +157,11 @@ Singleton {
     if (schemeExists) {
       Settings.data.colorSchemes.predefinedScheme = basename;
       applyScheme(schemeName);
-      ToastService.showNotice(I18n.tr("panels.color-scheme.title"), basename, "settings-color-scheme");
+      ToastService.showNotice(I18n.tr("panels.color-scheme.title"), getDisplayName(basename), "settings-color-scheme");
 
-      // Downstream fork patch: bridge to themectl so picking a scheme via
-      // noctalia's settings UI also re-skins ghostty/hypr/walker/btop/
-      // alacritty (whatever themectl manages). Map noctalia's PascalCase
-      // basename → themectl's kebab-case slug; bail silently if no match.
-      var themectlSlug = root._themectlSlugFor(basename);
-      if (themectlSlug) {
-        Quickshell.execDetached(["themectl", "set", themectlSlug]);
-      }
+      // Downstream fork: also re-skin ghostty/hypr/walker/btop/alacritty/
+      // firefox via themectl, threading the active dark/light mode through.
+      root._runThemectl(basename);
     } else {
       Logger.e("ColorScheme", "Scheme not found:", schemeName);
       ToastService.showError(I18n.tr("panels.color-scheme.title"), `'${basename}' ` + I18n.tr("common.not-found"));
