@@ -417,15 +417,42 @@ Singleton {
     }
   }
 
+  // Resolve a screen argument to the set of monitors to act on.
+  // - "all"           → every monitor
+  // - "" (default)    → focused screen only (via screenDetector)
+  // - "<screen-name>" → just that screen
+  function _brightnessMonitorsFor(screen: string, callback: var) {
+    if (screen === "all") {
+      callback(BrightnessService.monitors);
+      return;
+    }
+    if (screen && screen.trim().length > 0) {
+      var found = Quickshell.screens.find(s => s.name === screen);
+      if (!found) {
+        Logger.w("IPC", "brightness: unknown screen: " + screen);
+        return;
+      }
+      var m = BrightnessService.getMonitorForScreen(found);
+      if (m)
+        callback([m]);
+      return;
+    }
+    root.screenDetector.withCurrentScreen(s => {
+                                            var m = BrightnessService.getMonitorForScreen(s);
+                                            if (m)
+                                              callback([m]);
+                                          });
+  }
+
   IpcHandler {
     target: "brightness"
-    function increase() {
-      BrightnessService.increaseBrightness();
+    function increase(screen: string) {
+      root._brightnessMonitorsFor(screen, ms => ms.forEach(m => m.increaseBrightness()));
     }
-    function decrease() {
-      BrightnessService.decreaseBrightness();
+    function decrease(screen: string) {
+      root._brightnessMonitorsFor(screen, ms => ms.forEach(m => m.decreaseBrightness()));
     }
-    function set(value: string) {
+    function set(value: string, screen: string) {
       var val = parseFloat(value);
       if (isNaN(val))
         return;
@@ -437,7 +464,7 @@ Singleton {
       // Clamp
       val = Math.max(0.0, Math.min(1.0, val));
 
-      BrightnessService.setBrightness(val);
+      root._brightnessMonitorsFor(screen, ms => ms.forEach(m => m.setBrightnessDebounced(val)));
     }
   }
 
