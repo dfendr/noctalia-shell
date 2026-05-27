@@ -358,7 +358,11 @@ ColumnLayout {
             NText {
               text: schemeItem.schemeLabel
               pointSize: Style.fontSizeS
-              color: Color.mOnSurface
+              // Downstream fork: tile text uses the SCHEME's own mOnSurface
+              // (foreground for that scheme's bg), not the active theme's.
+              // Otherwise light-bg tiles get unreadable light text from a
+              // dark active theme and vice versa.
+              color: root.getSchemeColor(schemeItem.schemeName, "mOnSurface")
               Layout.fillWidth: true
               elide: Text.ElideRight
               verticalAlignment: Text.AlignVCenter
