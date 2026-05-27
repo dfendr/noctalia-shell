@@ -65,6 +65,14 @@ ColumnLayout {
   }
 
   NToggle {
+    label: I18n.tr("panels.osd.active-screen-only-label")
+    description: I18n.tr("panels.osd.active-screen-only-description")
+    checked: Settings.data.osd.activeScreenOnly
+    defaultValue: Settings.getDefaultValue("osd.activeScreenOnly")
+    onToggled: checked => Settings.data.osd.activeScreenOnly = checked
+  }
+
+  NToggle {
     label: I18n.tr("panels.osd.always-on-top-label")
     description: I18n.tr("panels.osd.always-on-top-description")
     checked: Settings.data.osd.overlayLayer

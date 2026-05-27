@@ -175,6 +175,10 @@ Singleton {
       Logger.d("IdleService", "Ignoring idle stage because it is disabled:", stage);
       return;
     }
+    if (Settings.data.idle.inhibitWhenFullscreen && CompositorService.hasFullscreenWindow) {
+      Logger.i("IdleService", "Inhibited by fullscreen window, skipping stage:", stage);
+      return;
+    }
 
     if (fadePending !== "") {
       _queueStage(stage);
@@ -183,6 +187,19 @@ Singleton {
     Logger.i("IdleService", "Idle fired:", stage);
     fadePending = stage;
     graceTimer.restart();
+  }
+
+  // Cancel an in-flight fade if a window enters fullscreen mid-fade
+  Connections {
+    target: CompositorService
+    function onHasFullscreenWindowChanged() {
+      if (!Settings.data.idle.inhibitWhenFullscreen)
+        return;
+      if (CompositorService.hasFullscreenWindow && root.fadePending !== "") {
+        Logger.i("IdleService", "Fullscreen window appeared, cancelling fade:", root.fadePending);
+        root.cancelFade();
+      }
+    }
   }
 
   function _executeAction(stage) {

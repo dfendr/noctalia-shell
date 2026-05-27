@@ -717,6 +717,7 @@ Singleton {
       property real backgroundOpacity: 1.0
       property list<var> enabledTypes: [OSD.Type.Volume, OSD.Type.InputVolume, OSD.Type.Brightness]
       property list<string> monitors: [] // holds osd visibility per monitor
+      property bool activeScreenOnly: false // when true, only show on the focused screen
     }
 
     // audio
@@ -805,6 +806,7 @@ Singleton {
       property string resumeLockCommand: ""
       property string resumeSuspendCommand: ""
       property string customCommands: "[]" // JSON array of {timeout, command, resumeCommand}
+      property bool inhibitWhenFullscreen: true
     }
 
     // desktop widgets

@@ -23,6 +23,8 @@ Singleton {
   property ListModel workspaces: ListModel {}
   property ListModel windows: ListModel {}
   property int focusedWindowIndex: -1
+  property bool hasFullscreenWindow: false
+  property string focusedScreenName: ""
 
   // Display scale data
   property var displayScales: ({})
@@ -215,6 +217,7 @@ Singleton {
     backend.workspaceChanged.connect(() => {
                                        // Sync workspaces when they change
                                        syncWorkspaces();
+                                       _updateFocusedScreenName();
                                        // Forward the signal
                                        workspaceChanged();
                                      });
@@ -222,6 +225,7 @@ Singleton {
     backend.activeWindowChanged.connect(() => {
                                           // Only sync focus state, not entire window list
                                           syncFocusedWindow();
+                                          _updateFocusedScreenName();
                                           // Forward the signal
                                           activeWindowChanged();
                                         });
@@ -234,6 +238,13 @@ Singleton {
     backend.focusedWindowIndexChanged.connect(() => {
                                                 focusedWindowIndex = backend.focusedWindowIndex;
                                               });
+
+    // Fullscreen state — optional; only Hyprland exposes it today
+    if (backend.hasFullscreenWindowChanged) {
+      backend.hasFullscreenWindowChanged.connect(() => {
+                                                   hasFullscreenWindow = backend.hasFullscreenWindow === true;
+                                                 });
+    }
 
     // Overview state (Niri-specific)
     if (backend.overviewActiveChanged) {
@@ -251,6 +262,36 @@ Singleton {
     }
     if (backend.globalWorkspaces !== undefined) {
       globalWorkspaces = backend.globalWorkspaces;
+    }
+    if (backend.hasFullscreenWindow !== undefined) {
+      hasFullscreenWindow = backend.hasFullscreenWindow === true;
+    }
+    _updateFocusedScreenName();
+  }
+
+  function _updateFocusedScreenName() {
+    let name = "";
+    // Prefer backend's authoritative focused-monitor lookup when available
+    if (backend && backend.getFocusedScreen) {
+      try {
+        const scr = backend.getFocusedScreen();
+        if (scr && scr.name) {
+          name = scr.name;
+        }
+      } catch (e) {}
+    }
+    // Fall back to the focused workspace's output
+    if (!name) {
+      for (var i = 0; i < workspaces.count; i++) {
+        const ws = workspaces.get(i);
+        if (ws.isFocused && ws.output) {
+          name = ws.output;
+          break;
+        }
+      }
+    }
+    if (focusedScreenName !== name) {
+      focusedScreenName = name;
     }
   }
 

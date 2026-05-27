@@ -1305,6 +1305,8 @@
       "enable-label": "Enable idle management",
       "fade-duration-description": "Seconds for the fade-to-black animation before each action fires. Any mouse movement cancels the fade.",
       "fade-duration-label": "Fade duration",
+      "inhibit-fullscreen-description": "Skip screen off, lock, and suspend stages while any window is fullscreen (videos, games, etc.).",
+      "inhibit-fullscreen-label": "Inhibit when fullscreen",
       "lock-description": "Seconds of inactivity before the lock screen activates.",
       "lock-label": "Lock screen",
       "resume-command-label": "Resume command",
@@ -1549,6 +1551,8 @@
       "toast-media-label": "Media"
     },
     "osd": {
+      "active-screen-only-description": "Only show OSD on the currently focused monitor instead of all selected monitors.",
+      "active-screen-only-label": "Active screen only",
       "always-on-top-description": "Display OSD above fullscreen windows and other layers.",
       "always-on-top-label": "Always on top",
       "background-opacity-description": "Controls the transparency of the OSD background.",

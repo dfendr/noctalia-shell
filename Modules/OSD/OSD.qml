@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
+import qs.Services.Compositor
 import qs.Services.Hardware
 import qs.Services.Keyboard
 import qs.Services.Media
@@ -22,7 +23,16 @@ Variants {
     LockKey
   }
 
-  model: Quickshell.screens.filter(screen => (Settings.data.osd.monitors.includes(screen.name) || Settings.data.osd.monitors.length === 0) && Settings.data.osd.enabled)
+  model: Quickshell.screens.filter(screen => {
+                                     if (!Settings.data.osd.enabled)
+                                       return false;
+                                     if (Settings.data.osd.activeScreenOnly) {
+                                       const focused = CompositorService.focusedScreenName;
+                                       if (focused && screen.name !== focused)
+                                         return false;
+                                     }
+                                     return Settings.data.osd.monitors.length === 0 || Settings.data.osd.monitors.includes(screen.name);
+                                   })
 
   delegate: Loader {
     id: root

@@ -20,6 +20,16 @@ ColumnLayout {
     onToggled: checked => Settings.data.idle.enabled = checked
   }
 
+  NToggle {
+    Layout.fillWidth: true
+    enabled: Settings.data.idle.enabled
+    label: I18n.tr("panels.idle.inhibit-fullscreen-label")
+    description: I18n.tr("panels.idle.inhibit-fullscreen-description")
+    checked: Settings.data.idle.inhibitWhenFullscreen
+    defaultValue: Settings.getDefaultValue("idle.inhibitWhenFullscreen")
+    onToggled: checked => Settings.data.idle.inhibitWhenFullscreen = checked
+  }
+
   // Live idle status
   RowLayout {
     Layout.fillWidth: true

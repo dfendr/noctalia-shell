@@ -12,6 +12,7 @@ Item {
   property ListModel workspaces: ListModel {}
   property var windows: []
   property int focusedWindowIndex: -1
+  property bool hasFullscreenWindow: false
 
   // Signals that match the facade interface
   signal workspaceChanged
@@ -321,6 +322,7 @@ Item {
 
       const hlToplevels = Hyprland.toplevels.values;
       let focusedWindowId = null;
+      let anyFullscreen = false;
 
       // Get active workspaces to filter focus
       const activeWorkspaceIds = {};
@@ -353,6 +355,7 @@ Item {
             "appId": windowData.appId ? String(windowData.appId) : "",
             "workspaceId": (typeof windowData.workspaceId === "number" && !isNaN(windowData.workspaceId)) ? windowData.workspaceId : -1,
             "isFocused": windowData.isFocused === true,
+            "isFullscreen": windowData.isFullscreen === true,
             "output": windowData.output ? String(windowData.output) : "",
             "x": (typeof windowData.x === "number" && !isNaN(windowData.x)) ? windowData.x : 0,
             "y": (typeof windowData.y === "number" && !isNaN(windowData.y)) ? windowData.y : 0
@@ -363,6 +366,9 @@ Item {
 
           if (normalized.isFocused) {
             focusedWindowId = normalized.id;
+          }
+          if (normalized.isFullscreen) {
+            anyFullscreen = true;
           }
         }
       }
@@ -383,6 +389,10 @@ Item {
       if (newFocusedIndex !== focusedWindowIndex) {
         focusedWindowIndex = newFocusedIndex;
         activeWindowChanged();
+      }
+
+      if (hasFullscreenWindow !== anyFullscreen) {
+        hasFullscreenWindow = anyFullscreen;
       }
     } catch (e) {
       Logger.e("HyprlandService", "Error updating windows:", e);
@@ -406,9 +416,10 @@ Item {
       const focused = toplevel.activated === true;
       const output = toplevel.monitor?.name || "";
 
-      // Extract position
+      // Extract position and fullscreen state
       let x = 0;
       let y = 0;
+      let fullscreen = false;
       try {
         const ipcData = toplevel.lastIpcObject;
         if (ipcData && ipcData.at) {
@@ -417,6 +428,15 @@ Item {
         } else if (typeof toplevel.x !== 'undefined') {
           x = toplevel.x;
           y = toplevel.y;
+        }
+        if (ipcData) {
+          // Hyprland reports `fullscreen` (legacy int / bitmask) and
+          // `fullscreenClient` (newer). Either non-zero counts.
+          const fs = ipcData.fullscreen;
+          const fsClient = ipcData.fullscreenClient;
+          if ((typeof fs === "number" && fs > 0) || (typeof fsClient === "number" && fsClient > 0)) {
+            fullscreen = true;
+          }
         }
       } catch (e) {}
 
@@ -430,6 +450,7 @@ Item {
         "appId": appId,
         "workspaceId": wsId || -1,
         "isFocused": focused,
+        "isFullscreen": fullscreen,
         "output": output,
         "x": safeX,
         "y": safeY
