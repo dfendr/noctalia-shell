@@ -744,7 +744,17 @@ Singleton {
 
     property JsonObject colorSchemes: JsonObject {
       property bool useWallpaperColors: false
+      // Legacy single-scheme field (kept for back-compat). Downstream fork
+      // splits the active selection per mode below; predefinedScheme is
+      // still read as a fallback when the per-mode fields are empty, and
+      // setPredefinedScheme keeps it mirroring whichever slot is current.
       property string predefinedScheme: "Noctalia (default)"
+      // Downstream fork: independent scheme per mode. Picking a scheme
+      // while darkMode is true writes to predefinedSchemeDark; while
+      // false, to predefinedSchemeLight. day/night transitions swap the
+      // active slug accordingly.
+      property string predefinedSchemeDark: ""
+      property string predefinedSchemeLight: ""
       property bool darkMode: true
       property string schedulingMode: "off"
       property string manualSunrise: "06:30"

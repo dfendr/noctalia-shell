@@ -41,13 +41,17 @@ Singleton {
     target: Settings.data.colorSchemes
     function onDarkModeChanged() {
       Logger.d("ColorScheme", "Detected dark mode change");
-      if (!Settings.data.colorSchemes.useWallpaperColors && Settings.data.colorSchemes.predefinedScheme) {
-        // Re-apply current scheme to pick the right variant
-        applyScheme(Settings.data.colorSchemes.predefinedScheme);
-        // Downstream fork: also propagate the mode flip to themectl so
-        // ghostty/hypr/walker/btop/alacritty/firefox follow noctalia's
-        // day/night transition.
-        root._runThemectl(Settings.data.colorSchemes.predefinedScheme);
+      // Downstream fork: pick the slug bound to the new mode instead of
+      // re-using the current one. activeSchemeSlug() reads the per-mode
+      // slot (predefinedSchemeDark / predefinedSchemeLight) and falls
+      // back to the legacy predefinedScheme if the slot is empty.
+      var active = root.activeSchemeSlug();
+      if (!Settings.data.colorSchemes.useWallpaperColors && active) {
+        // Mirror legacy field to the active slug so any code still
+        // reading predefinedScheme stays consistent
+        Settings.data.colorSchemes.predefinedScheme = active;
+        applyScheme(active);
+        root._runThemectl(active);
       }
       root.pushSystemColorScheme();
       // Toast: dark/light mode switched
@@ -122,6 +126,15 @@ Singleton {
     return canonical;
   }
 
+  // Downstream fork: which slug is active for the current dark/light mode.
+  // Falls back to the legacy predefinedScheme if the per-mode slot is
+  // empty (first-run / migration from the single-scheme model).
+  function activeSchemeSlug() {
+    var cs = Settings.data.colorSchemes;
+    var slot = cs.darkMode ? cs.predefinedSchemeDark : cs.predefinedSchemeLight;
+    return slot || cs.predefinedScheme;
+  }
+
   // Downstream fork: invoke themectl for the given slug with the active
   // dark/light mode. Used by both the user-driven setPredefinedScheme
   // path and the day/night dark-mode-flip Connection below.
@@ -155,6 +168,14 @@ Singleton {
     }
 
     if (schemeExists) {
+      // Downstream fork: write to the per-mode slot for the current
+      // darkMode. Legacy predefinedScheme mirrors the active slot so
+      // anything reading the old field keeps working.
+      if (Settings.data.colorSchemes.darkMode) {
+        Settings.data.colorSchemes.predefinedSchemeDark = basename;
+      } else {
+        Settings.data.colorSchemes.predefinedSchemeLight = basename;
+      }
       Settings.data.colorSchemes.predefinedScheme = basename;
       applyScheme(schemeName);
       ToastService.showNotice(I18n.tr("panels.color-scheme.title"), getDisplayName(basename), "settings-color-scheme");
@@ -186,14 +207,26 @@ Singleton {
         schemes = files;
         scanning = false;
         Logger.d("ColorScheme", "Listed", schemes.length, "schemes");
-        // Normalize stored scheme to basename and re-apply if necessary
-        var stored = Settings.data.colorSchemes.predefinedScheme;
-        if (stored) {
-          var basename = getBasename(stored);
-          if (basename !== stored) {
-            Settings.data.colorSchemes.predefinedScheme = basename;
+
+        // Downstream fork: seed per-mode slots from the legacy field on
+        // first run after upgrade (so existing users don't get an empty
+        // theme until they pick one in each mode).
+        var cs = Settings.data.colorSchemes;
+        if (!cs.predefinedSchemeDark && cs.predefinedScheme) {
+          cs.predefinedSchemeDark = getBasename(cs.predefinedScheme);
+        }
+        if (!cs.predefinedSchemeLight && cs.predefinedScheme) {
+          cs.predefinedSchemeLight = getBasename(cs.predefinedScheme);
+        }
+
+        // Apply whichever slug is bound to the active mode
+        var active = root.activeSchemeSlug();
+        if (active) {
+          var basename = getBasename(active);
+          if (basename !== cs.predefinedScheme) {
+            cs.predefinedScheme = basename;
           }
-          if (!Settings.data.colorSchemes.useWallpaperColors) {
+          if (!cs.useWallpaperColors) {
             applyScheme(basename);
           }
         }

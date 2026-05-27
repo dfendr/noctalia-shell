@@ -313,6 +313,19 @@ ColumnLayout {
       Layout.fillWidth: true
     }
 
+    // Downstream fork: indicate which per-mode slot the picker writes to.
+    // The active scheme is bound to noctalia's darkMode toggle (above);
+    // toggling dark mode flips which slot you're editing here.
+    NText {
+      Layout.fillWidth: true
+      text: Settings.data.colorSchemes.darkMode
+            ? "Editing theme for dark mode — toggle dark mode above to edit the light theme."
+            : "Editing theme for light mode — toggle dark mode above to edit the dark theme."
+      color: Color.mOnSurfaceVariant
+      pointSize: Style.fontSizeXS
+      wrapMode: Text.WordWrap
+    }
+
     GridLayout {
       columns: 2
       rowSpacing: Style.marginM
@@ -340,7 +353,9 @@ ColumnLayout {
           color: root.getSchemeColor(schemeName, "mSurface")
           border.width: Style.borderL
           border.color: {
-            if ((Settings.data.colorSchemes.predefinedScheme === schemeName) && schemeItem.enabled) {
+            // Downstream fork: compare against the per-mode slot, so the
+            // highlight tracks "selected for the current mode".
+            if ((ColorSchemeService.activeSchemeSlug() === schemeName) && schemeItem.enabled) {
               return Color.mSecondary;
             }
             if (itemMouseArea.containsMouse) {
@@ -418,7 +433,7 @@ ColumnLayout {
           }
 
           Rectangle {
-            visible: (Settings.data.colorSchemes.predefinedScheme === schemeItem.schemeName) && schemeItem.enabled
+            visible: (ColorSchemeService.activeSchemeSlug() === schemeItem.schemeName) && schemeItem.enabled
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.rightMargin: 0
