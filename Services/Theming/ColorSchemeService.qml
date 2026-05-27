@@ -118,6 +118,18 @@ Singleton {
     return preinstalledPath;
   }
 
+  // Downstream fork patch: maps a noctalia scheme basename to a themectl
+  // slug. Returns null if no themectl theme corresponds to this scheme.
+  function _themectlSlugFor(basename) {
+    // Hardcoded renames where noctalia and themectl disagree on spelling.
+    if (basename === "Rosepine") return "rose-pine";
+    if (basename === "Tokyo-Night") return "tokyo-night";
+    // Noctalia's own themes that themectl doesn't ship.
+    if (basename === "Noctalia-default" || basename === "Noctalia-legacy" ||
+        basename === "Dracula" || basename === "Eldritch") return null;
+    return basename.toLowerCase();
+  }
+
   function applyScheme(nameOrPath) {
     // Force reload by bouncing the path
     var filePath = resolveSchemePath(nameOrPath);
@@ -144,6 +156,15 @@ Singleton {
       Settings.data.colorSchemes.predefinedScheme = basename;
       applyScheme(schemeName);
       ToastService.showNotice(I18n.tr("panels.color-scheme.title"), basename, "settings-color-scheme");
+
+      // Downstream fork patch: bridge to themectl so picking a scheme via
+      // noctalia's settings UI also re-skins ghostty/hypr/walker/btop/
+      // alacritty (whatever themectl manages). Map noctalia's PascalCase
+      // basename → themectl's kebab-case slug; bail silently if no match.
+      var themectlSlug = root._themectlSlugFor(basename);
+      if (themectlSlug) {
+        Quickshell.execDetached(["themectl", "set", themectlSlug]);
+      }
     } else {
       Logger.e("ColorScheme", "Scheme not found:", schemeName);
       ToastService.showError(I18n.tr("panels.color-scheme.title"), `'${basename}' ` + I18n.tr("common.not-found"));
