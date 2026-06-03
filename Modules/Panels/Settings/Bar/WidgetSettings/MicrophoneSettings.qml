@@ -20,6 +20,9 @@ ColumnLayout {
   property string valueMiddleClickCommand: widgetData.middleClickCommand !== undefined ? widgetData.middleClickCommand : widgetMetadata.middleClickCommand
   property string valueIconColor: widgetData.iconColor !== undefined ? widgetData.iconColor : widgetMetadata.iconColor
   property string valueTextColor: widgetData.textColor !== undefined ? widgetData.textColor : widgetMetadata.textColor
+  // Downstream fork: click behavior — "panel" (default, opens audio panel
+  // like Volume) or "mute" (toggles input mute).
+  property string valueClickAction: widgetData.clickAction !== undefined ? widgetData.clickAction : (widgetMetadata.clickAction || "panel")
 
   function saveSettings() {
     var settings = Object.assign({}, widgetData || {});
@@ -27,6 +30,7 @@ ColumnLayout {
     settings.middleClickCommand = valueMiddleClickCommand;
     settings.iconColor = valueIconColor;
     settings.textColor = valueTextColor;
+    settings.clickAction = valueClickAction;
     settingsChanged(settings);
   }
 
@@ -73,6 +77,23 @@ ColumnLayout {
                   saveSettings();
                 }
     defaultValue: widgetMetadata.textColor
+  }
+
+  // Downstream fork: click action selector.
+  NComboBox {
+    label: "Left click"
+    description: "Open the audio panel like the Volume widget, or toggle input mute for one-click mic kill."
+    minimumWidth: 200
+    model: [
+      { "key": "panel", "name": "Open audio panel" },
+      { "key": "mute",  "name": "Toggle mic mute" }
+    ]
+    currentKey: valueClickAction
+    onSelected: key => {
+                  valueClickAction = key;
+                  saveSettings();
+                }
+    defaultValue: widgetMetadata.clickAction || "panel"
   }
 
   // Middle click command

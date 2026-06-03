@@ -36,6 +36,7 @@ Singleton {
   readonly property int loadAvgIntervalMs: 10000
   readonly property int diskIntervalMs: 30000
   readonly property int gpuIntervalMs: 5000
+  readonly property int fanIntervalMs: 3000
 
   // Public values
   property real cpuUsage: 0
@@ -47,6 +48,12 @@ Singleton {
   property real gpuTemp: 0
   property bool gpuAvailable: false
   property string gpuType: "" // "amd", "intel", "nvidia"
+  // Fan speeds via lm_sensors. Labels come from /etc/sensors.d (libsensors),
+  // which sysfs hwmon does not expose — hence the `sensors -j` subprocess.
+  property var fans: [] // [{ label, rpm }]
+  property bool fansAvailable: false
+  property var fanHistories: ({}) // keyed by fan label -> RPM history array
+  property real fanHistoryMax: 1500 // RPM axis max; grows to observed peak, rounded to 500
   property real memGb: 0
   property real memPercent: 0
   property real memTotalGb: 0
@@ -77,6 +84,7 @@ Singleton {
   readonly property int memHistoryLength: Math.ceil(historyDurationMs / memIntervalMs)
   readonly property int diskHistoryLength: Math.max(10, Math.ceil(historyDurationMs / diskIntervalMs))
   readonly property int networkHistoryLength: Math.ceil(historyDurationMs / networkIntervalMs)
+  readonly property int fanHistoryLength: Math.ceil(historyDurationMs / fanIntervalMs)
 
   property var cpuHistory: new Array(cpuHistoryLength).fill(0)
   property var cpuTempHistory: new Array(cpuHistoryLength).fill(40)  // Reasonable default temp
@@ -288,6 +296,9 @@ Singleton {
 
     // Get nproc on startup (one-time)
     nprocProcess.running = true;
+
+    // Check once whether lm_sensors is installed (gates fan polling)
+    sensorsCheck.running = true;
   }
 
   onShouldRunChanged: {
@@ -428,6 +439,19 @@ Singleton {
     onTriggered: updateGpuTemperature()
   }
 
+  // Timer for fan speeds
+  Timer {
+    id: fanTimer
+    interval: root.fanIntervalMs
+    repeat: true
+    running: root.shouldRun && root.fansAvailable
+    triggeredOnStart: true
+    onTriggered: {
+      if (!fanReader.running)
+        fanReader.running = true;
+    }
+  }
+
   // --------------------------------------------
   // FileView components for reading system files
   FileView {
@@ -535,6 +559,31 @@ Singleton {
       onStreamFinished: {
         root.nproc = parseInt(text.trim());
       }
+    }
+  }
+
+  // One-time check for lm_sensors availability (avoids spawning a missing binary every poll)
+  Process {
+    id: sensorsCheck
+    command: ["sh", "-c", "command -v sensors"]
+    running: false
+    stdout: StdioCollector {
+      onStreamFinished: {
+        root.fansAvailable = text.trim().length > 0;
+        Logger.i("SystemStat", root.fansAvailable ? "lm_sensors found — fan monitoring enabled" : "lm_sensors not found — fan monitoring disabled");
+      }
+    }
+  }
+
+  // Fan speeds via `sensors -j`. We shell out (rather than read sysfs hwmon
+  // directly) because friendly fan labels live in libsensors /etc/sensors.d
+  // config, not in sysfs.
+  Process {
+    id: fanReader
+    command: ["sensors", "-j"]
+    running: false
+    stdout: StdioCollector {
+      onStreamFinished: root.parseFans(text)
     }
   }
 
@@ -1012,6 +1061,69 @@ Singleton {
     if (!foundCmin) {
       root.zfsArcCminKb = 0;
     }
+  }
+
+  // -------------------------------------------------------
+  // Parse fan speeds from `sensors -j` output.
+  // Structure: { "<chip>": { "<label>": { "fanN_input": rpm, ... }, ... } }
+  // The label is the libsensors feature name (e.g. "CPU Fan" after relabeling).
+  // Fans reading 0 RPM (unused headers / spun-down) are omitted.
+  function parseFans(jsonText) {
+    if (!jsonText)
+      return;
+    let data;
+    try {
+      data = JSON.parse(jsonText);
+    } catch (e) {
+      Logger.w("SystemStat", "Failed to parse `sensors -j` output:", e);
+      return;
+    }
+    let result = [];
+    for (const chip in data) {
+      const features = data[chip];
+      if (typeof features !== "object" || features === null)
+        continue;
+      for (const label in features) {
+        const vals = features[label];
+        if (typeof vals !== "object" || vals === null)
+          continue;
+        for (const key in vals) {
+          if (/^fan[0-9]+_input$/.test(key)) {
+            const rpm = Math.round(vals[key]);
+            if (rpm > 0)
+              result.push({
+                            "label": label,
+                            "rpm": rpm
+                          });
+            break;
+          }
+        }
+      }
+    }
+    root.fans = result;
+
+    // Maintain per-fan RPM history (keyed by label), like disk histories.
+    // Histories are pre-filled with zeros so the graph has full length immediately.
+    let newHistories = {};
+    let maxRpm = 0;
+    for (let i = 0; i < result.length; i++) {
+      const label = result[i].label;
+      let h = root.fanHistories[label] ? root.fanHistories[label].slice() : new Array(root.fanHistoryLength).fill(0);
+      h.push(result[i].rpm);
+      if (h.length > root.fanHistoryLength)
+        h.shift();
+      newHistories[label] = h;
+      for (let j = 0; j < h.length; j++) {
+        if (h[j] > maxRpm)
+          maxRpm = h[j];
+      }
+    }
+    root.fanHistories = newHistories;
+
+    // Shared axis max across all fans, rounded up to the next 500 RPM (floor 1500)
+    const target = Math.max(1500, Math.ceil(maxRpm / 500) * 500);
+    if (target !== root.fanHistoryMax)
+      root.fanHistoryMax = target;
   }
 
   // -------------------------------------------------------

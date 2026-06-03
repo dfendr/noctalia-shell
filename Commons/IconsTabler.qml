@@ -37,6 +37,7 @@ Singleton {
     "cpu-usage": "brand-speedtest",
     "cpu-temperature": "flame",
     "gpu-temperature": "device-desktop",
+    "fan": "propeller",
     "memory": "cpu",
     "performance": "gauge",
     "balanced": "scale",

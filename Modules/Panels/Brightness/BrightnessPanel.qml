@@ -274,6 +274,11 @@ SmartPanel {
                     Layout.fillWidth: true
                     text: brightnessMonitor ? Math.round(brightnessSlider.value * 100) + "%" : "N/A"
                   }
+
+                  HdrToggle {
+                    screenName: modelData.name
+                    Layout.alignment: Qt.AlignVCenter
+                  }
                 }
               }
             }

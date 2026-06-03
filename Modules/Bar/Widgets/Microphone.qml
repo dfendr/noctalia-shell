@@ -40,6 +40,10 @@ Item {
   readonly property string middleClickCommand: (widgetSettings.middleClickCommand !== undefined) ? widgetSettings.middleClickCommand : widgetMetadata.middleClickCommand
   readonly property string iconColorKey: widgetSettings.iconColor !== undefined ? widgetSettings.iconColor : widgetMetadata.iconColor
   readonly property string textColorKey: widgetSettings.textColor !== undefined ? widgetSettings.textColor : widgetMetadata.textColor
+  // Downstream fork: per-widget click behavior. "panel" (default) opens
+  // the audio panel like Volume; "mute" toggles the input source's mute
+  // for a one-click mic kill that doesn't take focus to a panel.
+  readonly property string clickAction: (widgetSettings.clickAction !== undefined) ? widgetSettings.clickAction : (widgetMetadata.clickAction || "panel")
 
   // Used to avoid opening the pill on Quickshell startup
   property bool firstInputVolumeReceived: false
@@ -173,7 +177,11 @@ Item {
       }
     }
     onClicked: {
-      PanelService.getPanel("audioPanel", screen)?.toggle(this);
+      if (clickAction === "mute") {
+        AudioService.setInputMuted(!AudioService.inputMuted);
+      } else {
+        PanelService.getPanel("audioPanel", screen)?.toggle(this);
+      }
     }
     onRightClicked: {
       PanelService.showContextMenu(contextMenu, pill, screen);

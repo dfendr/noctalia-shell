@@ -60,7 +60,11 @@ Item {
     border.width: Style.borderS
 
     Behavior on color {
-      enabled: !Color.isTransitioning
+      // Gate on visibility too: a running ColorAnimation whose target is
+      // destroyed mid-flight aborts the process via __cxa_pure_virtual in
+      // ~QQuickBehavior (Qt 6.11). Disabling while hidden shrinks the window
+      // in which a teardown can land on a live animation.
+      enabled: root.visible && !Color.isTransitioning
       ColorAnimation {
         duration: Style.animationFast
         easing.type: Easing.InOutQuad
@@ -77,7 +81,7 @@ Item {
       y: Style.pixelAlignCenter(visualButton.height, contentHeight)
 
       Behavior on color {
-        enabled: !Color.isTransitioning
+        enabled: root.visible && !Color.isTransitioning
         ColorAnimation {
           duration: Style.animationFast
           easing.type: Easing.InOutQuad

@@ -21,6 +21,9 @@ SmartPanel {
     property real contentPreferredHeight: mainColumn.implicitHeight + Style.margin2L
     readonly property real cardHeight: 90 * Style.uiScaleRatio
 
+    // Per-fan line colors (shared by the fan chart's legend and graph lines)
+    readonly property var fanColors: [Color.mPrimary, Color.mSecondary, Color.mTertiary, Color.mError]
+
     // Get diskPath from bar's SystemMonitor widget if available, otherwise use "/"
     readonly property string diskPath: {
       const sysMonWidget = BarService.lookupWidget("SystemMonitor");
@@ -267,6 +270,75 @@ SmartPanel {
             fillOpacity: 0.15
             updateInterval: SystemStatService.networkIntervalMs
             animateScale: true
+          }
+        }
+      }
+
+      // Fan Speeds Card (one line per fan, shared RPM scale)
+      NBox {
+        Layout.fillWidth: true
+        Layout.preferredHeight: panelContent.cardHeight
+        visible: SystemStatService.fans.length > 0
+
+        ColumnLayout {
+          anchors.fill: parent
+          anchors.margins: Style.marginS
+          anchors.bottomMargin: Style.radiusM * 0.5
+          spacing: Style.marginXS
+
+          RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.marginXS
+
+            NIcon {
+              icon: "fan"
+              pointSize: Style.fontSizeXS
+              color: Color.mPrimary
+            }
+
+            // Legend: one colored entry per fan, matching its graph line
+            Repeater {
+              model: SystemStatService.fans
+
+              delegate: NText {
+                required property var modelData
+                required property int index
+                text: `${modelData.label} ${modelData.rpm}`
+                pointSize: Style.fontSizeXS
+                color: panelContent.fanColors[index % panelContent.fanColors.length]
+                font.family: Settings.data.ui.fontFixed
+                elide: Text.ElideRight
+                Layout.rightMargin: Style.marginS
+              }
+            }
+
+            Item {
+              Layout.fillWidth: true
+            }
+          }
+
+          // Overlaid single-line graphs — one NGraph per fan, shared scale
+          Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            Repeater {
+              model: SystemStatService.fans
+
+              delegate: NGraph {
+                required property var modelData
+                required property int index
+                anchors.fill: parent
+                values: SystemStatService.fanHistories[modelData.label] || []
+                minValue: 0
+                maxValue: SystemStatService.fanHistoryMax
+                color: panelContent.fanColors[index % panelContent.fanColors.length]
+                strokeWidth: Math.max(1, Style.uiScaleRatio)
+                fill: false
+                updateInterval: SystemStatService.fanIntervalMs
+                animateScale: true
+              }
+            }
           }
         }
       }

@@ -216,7 +216,8 @@ Singleton {
                                     "displayMode": "onhover",
                                     "middleClickCommand": "pwvucontrol || pavucontrol",
                                     "iconColor": "none",
-                                    "textColor": "none"
+                                    "textColor": "none",
+                                    "clickAction": "panel"
                                   },
                                   "NotificationHistory": {
                                     "showUnreadBadge": true,
